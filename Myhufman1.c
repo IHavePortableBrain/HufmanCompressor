@@ -115,20 +115,26 @@ hufNode *doHufNode(symb *pnewSymb) {
 };
 
 hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
-	#define MAXlenARRlinked  128 //max number of compositional nodes that have no parent
+	#define MAXlenARRlinked  2 //max number of compositional nodes that have no parent
 	hufNode *leftchild, *rightchild , *unlNodes[MAXlenARRlinked], *result = NULL;
 	unlNodes[0] = NULL; unlNodes[1] = NULL;
 	static symb resSymb;
 	const nodesComposing = 2;
 	unsigned char i = uniqchrs - 1;
+	change;
 	while (i > 0)
 	{
 		if ((*adrFT)[i].isComposition) {
-			for (unsigned char j = 0; j < MAXlenARRlinked; j++)
-			if ((unlNodes[j] != NULL) && (unlNodes[j]->symbol.freq == (*adrFT)[i].freq)) { //dirty comparison
-				rightchild = unlNodes[j];
+			if ((unlNodes[0] != NULL) && (unlNodes[0]->symbol.freq == (*adrFT)[i].freq)) { //иначе по массиву если MAXNUMunlinked <> 2
+				rightchild = unlNodes[0];
 				//free(unlNodes[0]); ты о чем вообще ты структуру строишь так то
-				unlNodes[j] = NULL;
+				unlNodes[0] = NULL;
+			}
+			else
+			{
+				rightchild = unlNodes[1];
+				//free(unlNodes[1]);
+				unlNodes[1] = NULL;
 			}
 		}else
 			rightchild = doHufNode((*adrFT) + i);
