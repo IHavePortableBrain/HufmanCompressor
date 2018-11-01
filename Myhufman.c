@@ -116,7 +116,7 @@ hufNode *doHufNode(symb *pnewSymb) {
 
 hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 	#define MAXlenARRlinked  128 //max number of compositional nodes that have no parent
-	hufNode *leftchild, *rightchild , *unlNodes[MAXlenARRlinked], *result = NULL;
+	hufNode *leftchild = NULL, *rightchild = NULL, *unlNodes[MAXlenARRlinked] = {NULL}, *result = NULL;
 	unlNodes[0] = NULL; unlNodes[1] = NULL;
 	static symb resSymb;
 	const nodesComposing = 2;
@@ -129,21 +129,18 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 				rightchild = unlNodes[j];
 				//free(unlNodes[0]); ты о чем вообще ты структуру строишь так то
 				unlNodes[j] = NULL;
+				break;
 			}
 		}else
 			rightchild = doHufNode((*adrFT) + i);
 		if ((*adrFT)[i - 1].isComposition) {
-			if ((unlNodes[0] != NULL) && (unlNodes[0]->symbol.freq == (*adrFT)[i - 1].freq)) { //иначе по массиву если MAXNUMunlinked <> 2
-				leftchild = unlNodes[0];
-				//free(unlNodes[0]);
-				unlNodes[0] = NULL;
-			}
-			else
-			{
-				leftchild = unlNodes[1];
-				//free(unlNodes[1]);
-				unlNodes[1] = NULL;
-			}
+			for (unsigned char j = 0; j < MAXlenARRlinked; j++)
+				if ((unlNodes[j] != NULL) && (unlNodes[j]->symbol.freq == (*adrFT)[i - 1].freq)) { //иначе по массиву если MAXNUMunlinked <> 2
+					leftchild = unlNodes[j];
+					//free(unlNodes[0]);
+					unlNodes[j] = NULL;
+					break;
+				}
 		}else
 			leftchild = doHufNode((*adrFT) + i - 1);
 		resSymb.isComposition = 1;//node consists composition of freqs of symbols; "ch" field is senseless
@@ -151,7 +148,12 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 		result = doHufNode(&resSymb);
 		result->left = leftchild;
 		result->right = rightchild;
-		unlNodes[(unlNodes[0] == NULL) ? 0 : 1] = result;//must free unl nodes[i] when link
+		for (unsigned char j = 0; j < MAXlenARRlinked; j++)
+			if (unlNodes[j] == NULL) { 
+				unlNodes[j] = (hufNode *)calloc(1, sizeof(hufNode));
+				*unlNodes[j] = *result; 
+				break; 
+			}//must NULL unl nodes[i] when link
 		FTDelLastEl(adrFT, &uniqchrs);
 		FTDelLastEl(adrFT, &uniqchrs);
 		FTadd(adrFT, &resSymb, &uniqchrs, 1); 
@@ -194,7 +196,7 @@ void main() {
 	freqTable *FT = dofreqTable(f, &uniqchrs);
 	/* before do huftree save freqtable if needed*/
 	hufNode *hufTree = doHufTree(FT, uniqchrs); //seems to work
-	hufTableCell *dummyCell = (hufTable *)calloc(1, sizeof(hufTableCell));
+	hufTableCell *dummyCell = (hufTableCell *)calloc(1, sizeof(hufTableCell));
 	fillhuftable(&HTable, hufTree, dummyCell);
 
 	system("pause");
