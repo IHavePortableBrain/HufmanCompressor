@@ -121,6 +121,7 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 	static symb resSymb;
 	const nodesComposing = 2;
 	unsigned char i = uniqchrs - 1;
+	change;
 	while (i > 0)
 	{
 		if ((*adrFT)[i].isComposition) {
