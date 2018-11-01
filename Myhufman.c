@@ -118,7 +118,6 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 	#define MAXlenARRlinked  128 //max number of compositional nodes that have no parent
 	hufNode *leftchild = NULL, *rightchild = NULL, *unlNodes[MAXlenARRlinked] = {NULL}, *result = NULL;
 	unlNodes[0] = NULL; unlNodes[1] = NULL;
-	//влад
 	static symb resSymb;
 	const nodesComposing = 2;
 	unsigned char i = uniqchrs - 1;
