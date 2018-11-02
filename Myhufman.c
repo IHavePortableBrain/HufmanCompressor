@@ -189,7 +189,7 @@ void fillhuftable(hufTable* HTable, hufNode *HTree, hufTableCell* HCell) {
 		//HTable->table[HTable->FilledCells].ch = ;
 		HTable->table[HTree->symbol.ch].HufCodeLen = HCell->HufCodeLen;
 		for (unsigned char i = 0; i < HCell->HufCodeLen; i++)
-			HTable->table[HTable->FilledCells].code[i] = HCell->code[i];
+			HTable->table[HTree->symbol.ch].code[i] = HCell->code[i];
 		HTable->FilledCells++;
 	}
 };
@@ -211,15 +211,50 @@ void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
 	{
 		if (HTable->table[i].HufCodeLen)
 		{
-			fprintf(fcompr, "%c%c", i, HTable->table[i].HufCodeLen);
-			for (int j = 0; j < HTable->table[i].HufCodeLen; j++)
+			bufcompr[bufcomprpos++] = i;
+			if (bufcomprpos > BUFSIZ)  
+			{
+				fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
+				bufcomprpos = 0;
+			}
+			bufcompr[bufcomprpos++] = HTable->table[i].HufCodeLen;
+			if (bufcomprpos > BUFSIZ){
+				fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
+				bufcomprpos = 0;
+			}
+			for (int j = 0; j < HTable->table[i].HufCodeLen; j++)//переделать на сдвиги?
 			{
 				currByte.b[bitsTaken++] = HTable->table[i].code[j];
-				ifByteTakenWriteToBufCompr(bitsTaken);
+				if (CHAR_BIT == bitsTaken) {					//ifByteTakenWriteToBufCompr(bitsTaken);
+						bitsTaken = 0; 
+						bufcompr[bufcomprpos++] = currByte.val; 						
+						currByte.val = 0;
+						if (bufcomprpos > (BUFSIZ)) {		//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr); 
+							fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
+							bufcomprpos = 0;
+						}
+				}
+			}
+			while (bitsTaken < 8) {
+				currByte.b[bitsTaken++] = b0;
+			}
+			bitsTaken = 0;
+			bufcompr[bufcomprpos++] = currByte.val;
+			currByte.val = 0;
+			if (bufcomprpos > (BUFSIZ)) {		//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr); 
+				fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
+				bufcomprpos = 0;
 			}
 		}
 	}
-	fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+
+
+	//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+	{
+			fwrite((bufcompr), (sizeof(unsigned char)), bufcomprpos, (fcompr)); 
+			bufcomprpos = 0; 
+	}
+
 	//compress finp data and write to fcompr
 	size_t bytesRead = BUFSIZ;
 	while (bytesRead == BUFSIZ) {
@@ -229,16 +264,34 @@ void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
 			for (size_t j = 0; j < HTable->table[buf[i]].HufCodeLen; j++)
 			{
 				currByte.b[bitsTaken++] = HTable->table[buf[i]].code[j];
-				ifByteTakenWriteToBufCompr(bitsTaken);
+				//ifByteTakenWriteToBufCompr(bitsTaken);
+				if (CHAR_BIT == bitsTaken) {
+					bitsTaken = 0;
+					currByte.val = 0;
+					bufcompr[bufcomprpos++] = currByte.val;
+					//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr); 
+					if ((bufcomprpos) > (BUFSIZ)) {
+						fwrite((bufcompr), (sizeof(unsigned char)), ((bufcomprpos)-1), (fcompr));
+						bufcomprpos = 0;
+					}
+				}
 			}
 		}
 	}
-	fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+	//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+	{
+		fwrite((bufcompr), (sizeof(unsigned char)), ((bufcomprpos)-1), (fcompr));
+		bufcomprpos = 0;
+	}
 	//if bits compressed not mult 8
 	fprintf(fcompr, "%c", CHAR_BIT - bitsTaken);
 }
 
+
 void main() {
+	unsigned short x = 1; /* 0x0001 */
+	printf("%s\n", *((unsigned char *)&x) == 0 ? "big-endian" : "little-endian");
+
 	unsigned char uniqchrs;
 	FILE *f = fopen("12345.txt", "rb");
 	FILE *fcompresed = fopen("compresed", "wb");
