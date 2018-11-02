@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 #define fflushBufIfIsFilled(buf, ElSize, BufSize,BufPos,f) if ((BufPos) > (BufSize)) {\
-	fwrite((buf),(ElSize), ((BufPos) - 1), (f));\
+	fwrite((buf),(ElSize), ((BufPos)), (f));\
 	BufPos = 0;\
 	}
 
@@ -16,13 +16,6 @@ typedef struct _symb {
 
 typedef symb* freqTable;
 
-typedef struct { unsigned short b : 1; } bit;
-
-typedef union _byte {
-	unsigned char val;
-	bit b[CHAR_BIT];
-}byte;
-
 typedef struct _hufNode {
 	symb symbol;
 	struct _hufNode *left;
@@ -32,7 +25,7 @@ typedef struct _hufNode {
 typedef struct _hufTableCell{
 	//unsigned char ch; not needed because index in table = ord(ch)
 	unsigned char HufCodeLen;
-	bit code[UCHAR_MAX]; //?количество битов кода однозначно меньше битмах так как оно будет меньше log2(255) по свойствам бинарного дерева
+	unsigned char code[UCHAR_MAX]; //?количество битов кода однозначно меньше битмах так как оно будет меньше log2(255) по свойствам бинарного дерева
 }hufTableCell;
 
 typedef struct _hufTable {
@@ -42,8 +35,7 @@ typedef struct _hufTable {
 
 /*____________________________________Const________________________________________________________________*/
 
-const bit b0 = { 0 };
-const bit b1 = { 1 };
+
 /*____________________________________Var________________________________________________________________*/
 
 unsigned char buf[BUFSIZ];
@@ -174,13 +166,13 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 void fillhuftable(hufTable* HTable, hufNode *HTree, hufTableCell* HCell) {
 	hufTableCell nextCell = *HCell;
 	if (HTree->left != NULL) {
-		nextCell.code[nextCell.HufCodeLen] = b0;
+		nextCell.code[nextCell.HufCodeLen] = 0;
 		nextCell.HufCodeLen++;
 		fillhuftable(HTable, HTree->left, &nextCell);
 	}
 	nextCell = *HCell;
 	if (HTree->right != NULL) {
-		nextCell.code[nextCell.HufCodeLen] = b1;
+		nextCell.code[nextCell.HufCodeLen] = 1;
 		nextCell.HufCodeLen++;
 		fillhuftable(HTable, HTree->right, &nextCell);
 	}
@@ -198,63 +190,43 @@ void fillhuftable(hufTable* HTable, hufNode *HTree, hufTableCell* HCell) {
 void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
 #define ifByteTakenWriteToBufCompr(bitsTaken) if (CHAR_BIT == bitsTaken) {\
 			bitsTaken = 0;\
-			currByte.val = 0;\
-			bufcompr[bufcomprpos++] = currByte.val;\
+			bufcompr[bufcomprpos++] = currByte;\
+			currByte = 0;\
 			fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr);\
 			}
 	//print HTable to fcompr
-	fprintf(fcompr, "%c", HTable->FilledCells);
-	byte currByte; 
+	unsigned char currByte = 0; 
 	size_t bufcomprpos = 0;
 	unsigned char bitsTaken = 0;
+	bufcompr[bufcomprpos++] = HTable->FilledCells;
 	for (int i = 0; i < UCHAR_MAX + 1; i++) //тут интеджер а в выводе с.Хоть в бинарном файле вывод правильный есть подозрения что может пойти не так
 	{
 		if (HTable->table[i].HufCodeLen)
 		{
 			bufcompr[bufcomprpos++] = i;
-			if (bufcomprpos > BUFSIZ)  
-			{
-				fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
-				bufcomprpos = 0;
-			}
+			fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr)
 			bufcompr[bufcomprpos++] = HTable->table[i].HufCodeLen;
-			if (bufcomprpos > BUFSIZ){
-				fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
-				bufcomprpos = 0;
-			}
+			fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr)
 			for (int j = 0; j < HTable->table[i].HufCodeLen; j++)//переделать на сдвиги?
 			{
-				currByte.b[bitsTaken++] = HTable->table[i].code[j];
-				if (CHAR_BIT == bitsTaken) {					//ifByteTakenWriteToBufCompr(bitsTaken);
-						bitsTaken = 0; 
-						bufcompr[bufcomprpos++] = currByte.val; 						
-						currByte.val = 0;
-						if (bufcomprpos > (BUFSIZ)) {		//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr); 
-							fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
-							bufcomprpos = 0;
-						}
+				currByte = currByte << 1;
+				currByte += HTable->table[i].code[j];
+				bitsTaken++;
+				ifByteTakenWriteToBufCompr(bitsTaken)
+			}
+			if (bitsTaken)
+			{
+				while (bitsTaken < CHAR_BIT) {
+					currByte = currByte << 1;
+					bitsTaken++;
 				}
+				bitsTaken = 0;
+				bufcompr[bufcomprpos++] = currByte;
+				currByte = 0;
 			}
-			while (bitsTaken < 8) {
-				currByte.b[bitsTaken++] = b0;
-			}
-			bitsTaken = 0;
-			bufcompr[bufcomprpos++] = currByte.val;
-			currByte.val = 0;
-			if (bufcomprpos > (BUFSIZ)) {		//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr); 
-				fwrite(bufcompr, sizeof(unsigned char), bufcomprpos - 1, fcompr);
-				bufcomprpos = 0;
-			}
+			fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr)
 		}
 	}
-
-
-	//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
-	{
-			fwrite((bufcompr), (sizeof(unsigned char)), bufcomprpos, (fcompr)); 
-			bufcomprpos = 0; 
-	}
-
 	//compress finp data and write to fcompr
 	size_t bytesRead = BUFSIZ;
 	while (bytesRead == BUFSIZ) {
@@ -263,28 +235,26 @@ void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
 		{
 			for (size_t j = 0; j < HTable->table[buf[i]].HufCodeLen; j++)
 			{
-				currByte.b[bitsTaken++] = HTable->table[buf[i]].code[j];
-				//ifByteTakenWriteToBufCompr(bitsTaken);
-				if (CHAR_BIT == bitsTaken) {
-					bitsTaken = 0;
-					currByte.val = 0;
-					bufcompr[bufcomprpos++] = currByte.val;
-					//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr); 
-					if ((bufcomprpos) > (BUFSIZ)) {
-						fwrite((bufcompr), (sizeof(unsigned char)), ((bufcomprpos)-1), (fcompr));
-						bufcomprpos = 0;
-					}
-				}
+				currByte = currByte << 1;
+				currByte += HTable->table[buf[i]].code[j];
+				bitsTaken++;
+				ifByteTakenWriteToBufCompr(bitsTaken)
 			}
 		}
 	}
-	//fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+	unsigned char lastByteMeaningfulBits = bitsTaken;
+	if (bitsTaken)
 	{
-		fwrite((bufcompr), (sizeof(unsigned char)), ((bufcomprpos)-1), (fcompr));
-		bufcomprpos = 0;
+		while (bitsTaken < CHAR_BIT) {
+			currByte = currByte << 1;
+			bitsTaken++;
+		}
+		bufcompr[bufcomprpos++] = currByte;
+		currByte = 0;
+		fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr)
 	}
-	//if bits compressed not mult 8
-	fprintf(fcompr, "%c", CHAR_BIT - bitsTaken);
+	bufcompr[bufcomprpos++] = lastByteMeaningfulBits;
+	fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr)
 }
 
 
