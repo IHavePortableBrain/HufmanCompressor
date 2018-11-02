@@ -30,13 +30,13 @@ typedef struct _hufNode {
 }hufNode;
 
 typedef struct _hufTableCell{
-	unsigned char ch;
+	//unsigned char ch; not needed because index in table = ord(ch)
 	unsigned char HufCodeLen;
 	bit code[UCHAR_MAX]; //?количество битов кода однозначно меньше битмах так как оно будет меньше log2(255) по свойствам бинарного дерева
 }hufTableCell;
 
 typedef struct _hufTable {
-	unsigned char len;
+	unsigned char FilledCells;
 	hufTableCell table[UCHAR_MAX];
 }hufTable;
 
@@ -83,7 +83,7 @@ int cmpFreq(symb *const pa,symb *const pb) {
 
 freqTable *dofreqTable(FILE *f, unsigned char *puniqchrs) {
 	/*expects f to be open "rb"
-		uniqchrs = len(FT)	*/
+		uniqchrs = FilledCells(FT)	*/
 
 	unsigned long numCh[UCHAR_MAX + 1] = { 0UL };
 	unsigned long prevfPos = ftell(f);
@@ -186,15 +186,13 @@ void fillhuftable(hufTable* HTable, hufNode *HTree, hufTableCell* HCell) {
 	}
 	if (!HTree->symbol.isComposition)
 	{
-		HTable->table[HTable->len].ch = HTree->symbol.ch;
-		HTable->table[HTable->len].HufCodeLen = HCell->HufCodeLen;
+		//HTable->table[HTable->FilledCells].ch = ;
+		HTable->table[HTree->symbol.ch].HufCodeLen = HCell->HufCodeLen;
 		for (unsigned char i = 0; i < HCell->HufCodeLen; i++)
-			HTable->table[HTable->len].code[i] = HCell->code[i];
-		HTable->len++;
+			HTable->table[HTable->FilledCells].code[i] = HCell->code[i];
+		HTable->FilledCells++;
 	}
 };
-
-
 
 //finp is to be opened "rb",fcompr is to be opened "wb" 
 void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
@@ -205,24 +203,26 @@ void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
 			fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr);\
 			}
 	//print HTable to fcompr
-	unsigned char HTLen = HTable->len;
-	fprintf(fcompr, "%c", HTLen);
+	fprintf(fcompr, "%c", HTable->FilledCells);
 	byte currByte; 
 	size_t bufcomprpos = 0;
 	unsigned char bitsTaken = 0;
-	for (int i = 0; i < HTLen; i++)
+	for (int i = 0; i < UCHAR_MAX + 1; i++) //тут интеджер а в выводе с.Хоть в бинарном файле вывод правильный есть подозрения что может пойти не так
 	{
-		fprintf(fcompr, "%c%c", HTable->table[i].ch, HTable->table[i].HufCodeLen);
-		for (int j = 0; j < HTable->table[i].HufCodeLen; j++)
+		if (HTable->table[i].HufCodeLen)
 		{
-			currByte.b[bitsTaken++] = HTable->table[i].code[j];
-			ifByteTakenWriteToBufCompr(bitsTaken);
+			fprintf(fcompr, "%c%c", i, HTable->table[i].HufCodeLen);
+			for (int j = 0; j < HTable->table[i].HufCodeLen; j++)
+			{
+				currByte.b[bitsTaken++] = HTable->table[i].code[j];
+				ifByteTakenWriteToBufCompr(bitsTaken);
+			}
 		}
 	}
 	fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
 	//compress finp data and write to fcompr
 	size_t bytesRead = BUFSIZ;
-	while (bytesRead != BUFSIZ) {
+	while (bytesRead == BUFSIZ) {
 		bytesRead = fread(buf, sizeof(unsigned char), BUFSIZ, finp);
 		for (size_t i = 0; i < bytesRead; i++)
 		{
@@ -240,7 +240,7 @@ void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
 
 void main() {
 	unsigned char uniqchrs;
-	FILE *f = fopen("173.txt", "rb");
+	FILE *f = fopen("12345.txt", "rb");
 	FILE *fcompresed = fopen("compresed", "wb");
 	freqTable *FT = dofreqTable(f, &uniqchrs);
 	/* before do huftree save freqtable if needed*/
@@ -251,6 +251,7 @@ void main() {
 
 	compressHuf(f, fcompresed, &HTable);
 	fclose(f);
+	fflush(fcompresed);
 	fclose(fcompresed);
 	system("pause");
 }
