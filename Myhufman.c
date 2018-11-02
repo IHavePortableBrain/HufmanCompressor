@@ -1,6 +1,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#define fflushBufIfIsFilled(buf, ElSize, BufSize,BufPos,f) if ((BufPos) > (BufSize)) {\
+	fwrite((buf),(ElSize), ((BufPos) - 1), (f));\
+	BufPos = 0;\
+	}
 
 /*____________________________________TYPE________________________________________________________________*/
 
@@ -43,6 +47,7 @@ const bit b1 = { 1 };
 /*____________________________________Var________________________________________________________________*/
 
 unsigned char buf[BUFSIZ];
+unsigned char bufcompr[BUFSIZ];
 
 hufTable HTable;
 
@@ -190,14 +195,62 @@ void fillhuftable(hufTable* HTable, hufNode *HTree, hufTableCell* HCell) {
 };
 
 
+
+//finp is to be opened "rb",fcompr is to be opened "wb" 
+void compressHuf(FILE* finp, FILE* fcompr, hufTable *HTable) {
+#define ifByteTakenWriteToBufCompr(bitsTaken) if (CHAR_BIT == bitsTaken) {\
+			bitsTaken = 0;\
+			currByte.val = 0;\
+			bufcompr[bufcomprpos++] = currByte.val;\
+			fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), BUFSIZ, bufcomprpos, fcompr);\
+			}
+	//print HTable to fcompr
+	unsigned char HTLen = HTable->len;
+	fprintf(fcompr, "%c", HTLen);
+	byte currByte; 
+	size_t bufcomprpos = 0;
+	unsigned char bitsTaken = 0;
+	for (int i = 0; i < HTLen; i++)
+	{
+		fprintf(fcompr, "%c%c", HTable->table[i].ch, HTable->table[i].HufCodeLen);
+		for (int j = 0; j < HTable->table[i].HufCodeLen; j++)
+		{
+			currByte.b[bitsTaken++] = HTable->table[i].code[j];
+			ifByteTakenWriteToBufCompr(bitsTaken);
+		}
+	}
+	fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+	//compress finp data and write to fcompr
+	size_t bytesRead = BUFSIZ;
+	while (bytesRead != BUFSIZ) {
+		bytesRead = fread(buf, sizeof(unsigned char), BUFSIZ, finp);
+		for (size_t i = 0; i < bytesRead; i++)
+		{
+			for (size_t j = 0; j < HTable->table[buf[i]].HufCodeLen; j++)
+			{
+				currByte.b[bitsTaken++] = HTable->table[buf[i]].code[j];
+				ifByteTakenWriteToBufCompr(bitsTaken);
+			}
+		}
+	}
+	fflushBufIfIsFilled(bufcompr, sizeof(unsigned char), 0, bufcomprpos, fcompr);
+	//if bits compressed not mult 8
+	fprintf(fcompr, "%c", CHAR_BIT - bitsTaken);
+}
+
 void main() {
 	unsigned char uniqchrs;
 	FILE *f = fopen("173.txt", "rb");
+	FILE *fcompresed = fopen("compresed", "wb");
 	freqTable *FT = dofreqTable(f, &uniqchrs);
 	/* before do huftree save freqtable if needed*/
 	hufNode *hufTree = doHufTree(FT, uniqchrs); //seems to work
 	hufTableCell *dummyCell = (hufTableCell *)calloc(1, sizeof(hufTableCell));
 	fillhuftable(&HTable, hufTree, dummyCell);
+	//сжимать файл
 
+	compressHuf(f, fcompresed, &HTable);
+	fclose(f);
+	fclose(fcompresed);
 	system("pause");
 }
