@@ -29,7 +29,7 @@ typedef struct _hufTableCell{
 }hufTableCell;
 
 typedef struct _hufTable {
-	unsigned char FilledCells;
+	unsigned short FilledCells;
 	hufTableCell table[UCHAR_MAX];
 }hufTable;
 
@@ -45,17 +45,17 @@ hufTable HTable;
 
 /*_________________________________Functions____________________________________________________*/
 
-void FTadd(freqTable *adrFT,symb *pnewSymb,unsigned char *puniqchrs,char placeInSorted) {
+void FTadd(freqTable *adrFT,symb *pnewSymb,unsigned short *puniqchrs,unsigned char dontBreakSort) {
 	if ((pnewSymb != NULL) && (adrFT != NULL))
 	{//вставлять в нужное место
 		if (*adrFT == NULL) *adrFT = (symb *)calloc(1, sizeof(symb));
 		*adrFT = (freqTable)realloc(*adrFT, ++(*puniqchrs) * sizeof(symb));
-		char placeToInsert = (*puniqchrs) - 1;
-		if (placeInSorted) {
+		unsigned short placeToInsert = (*puniqchrs) - 1;
+		if (dontBreakSort) {
 			while ((placeToInsert > 0) && ((*adrFT)[placeToInsert - 1].freq < pnewSymb->freq)) 
 				placeToInsert--;//таблица отсортирована по убыванию
 			//placeToInsert++;//поправка на последнюю проверку, которая не была пройдена, но значение placeToInsert уменьшено 
-			for (char i = (*puniqchrs) - 1; i > placeToInsert; i--)
+			for (unsigned short i = (*puniqchrs) - 1; i > placeToInsert; i--)
 				(*adrFT)[i] = (*adrFT)[i - 1];//большие траты на перекидование структур символов а не их указателей
 			(*adrFT)[placeToInsert] = *pnewSymb;
 		}
@@ -64,7 +64,7 @@ void FTadd(freqTable *adrFT,symb *pnewSymb,unsigned char *puniqchrs,char placeIn
 	}
 }
 
-void FTDelLastEl(freqTable *adrFT, unsigned char *puniqchrs) {
+void FTDelLastEl(freqTable *adrFT, unsigned short *puniqchrs) {
 	//free((*adrFT)[*puniqchrs]); если будешь менять символы на указатель символов
 	*adrFT =(freqTable)realloc(*adrFT,--(*puniqchrs) * sizeof(symb));//надо ли?
 }
@@ -73,11 +73,10 @@ int cmpFreq(symb *const pa,symb *const pb) {
 	return (pb->freq - pa->freq) < 0 ? -1 : 1;
 }
 
-freqTable *dofreqTable(FILE *f, unsigned char *puniqchrs) {
+freqTable *dofreqTable(FILE *f, unsigned short *puniqchrs) {
 	/*expects f to be open "rb"
 		uniqchrs = FilledCells(FT)	*/
-
-	unsigned long numCh[UCHAR_MAX + 1] = { 0UL };
+	unsigned long numByte[UCHAR_MAX + 1] = { 0UL };
 	unsigned long prevfPos = ftell(f);
 	unsigned long flen = 0;
 	unsigned long bytesRead = 0;
@@ -86,7 +85,7 @@ freqTable *dofreqTable(FILE *f, unsigned char *puniqchrs) {
 		bytesRead = fread_s(buf, sizeof(unsigned char) * BUFSIZ,sizeof(unsigned char), BUFSIZ, f);
 		for (unsigned long i = 0; i < bytesRead; i++)
 		{
-			numCh[buf[i]]++;//counts number of meeting each byte in f
+			numByte[buf[i]]++;//counts number of meeting each byte in f
 			flen++;
 		}
 	} while (bytesRead == BUFSIZ);
@@ -94,9 +93,9 @@ freqTable *dofreqTable(FILE *f, unsigned char *puniqchrs) {
 	symb NewSymb;
 	*puniqchrs = 0;
 	for (int i = 0; i < UCHAR_MAX + 1; i++)
-		if (numCh[i] != 0) {
+		if (numByte[i] != 0) {
 			NewSymb.ch = i;
-			NewSymb.freq = (float)numCh[i] / flen;
+			NewSymb.freq = (float)numByte[i] / flen;
 			NewSymb.isComposition = 0;
 			FTadd(&FT, &NewSymb, puniqchrs, 0);
 		}
@@ -111,17 +110,16 @@ hufNode *doHufNode(symb *pnewSymb) {
 	return res;
 };
 
-hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
-	#define MAXlenARRlinked  128 //max number of compositional nodes that have no parent
-	hufNode *leftchild = NULL, *rightchild = NULL, *unlNodes[MAXlenARRlinked] = {NULL}, *result = NULL;
-	unlNodes[0] = NULL; unlNodes[1] = NULL;
+hufNode *doHufTree(freqTable *adrFT,unsigned short uniqchrs) {
+	#define MAXlenARRunlinked  128 //max number of compositional nodes that have no parent
+	hufNode *leftchild = NULL, *rightchild = NULL, *unlNodes[MAXlenARRunlinked] = {NULL}, *result = NULL;
 	static symb resSymb;
-	const nodesComposing = 2;
-	unsigned char i = uniqchrs - 1;
+	const char nodesComposing = 2;
+	unsigned short i = uniqchrs - 1;
 	while (i > 0)
 	{
 		if ((*adrFT)[i].isComposition) {
-			for (unsigned char j = 0; j < MAXlenARRlinked; j++)
+			for (unsigned short j = 0; j < MAXlenARRunlinked; j++)
 			if ((unlNodes[j] != NULL) && (unlNodes[j]->symbol.freq == (*adrFT)[i].freq)) { //dirty comparison
 				rightchild = unlNodes[j];
 				//free(unlNodes[0]); ты о чем вообще ты структуру строишь так то
@@ -131,7 +129,7 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 		}else
 			rightchild = doHufNode((*adrFT) + i);
 		if ((*adrFT)[i - 1].isComposition) {
-			for (unsigned char j = 0; j < MAXlenARRlinked; j++)
+			for (unsigned short j = 0; j < MAXlenARRunlinked; j++)
 				if ((unlNodes[j] != NULL) && (unlNodes[j]->symbol.freq == (*adrFT)[i - 1].freq)) { //иначе по массиву если MAXNUMunlinked <> 2
 					leftchild = unlNodes[j];
 					//free(unlNodes[0]);
@@ -145,7 +143,7 @@ hufNode *doHufTree(freqTable *adrFT,unsigned char uniqchrs) {
 		result = doHufNode(&resSymb);
 		result->left = leftchild;
 		result->right = rightchild;
-		for (unsigned char j = 0; j < MAXlenARRlinked; j++)
+		for (unsigned short j = 0; j < MAXlenARRunlinked; j++)
 			if (unlNodes[j] == NULL) { 
 				unlNodes[j] = (hufNode *)calloc(1, sizeof(hufNode));
 				*unlNodes[j] = *result; 
@@ -180,7 +178,7 @@ void fillhuftable(hufTable* HTable, hufNode *HTree, hufTableCell* HCell) {
 	{
 		//HTable->table[HTable->FilledCells].ch = ;
 		HTable->table[HTree->symbol.ch].HufCodeLen = HCell->HufCodeLen;
-		for (unsigned char i = 0; i < HCell->HufCodeLen; i++)
+		for (unsigned short i = 0; i < HCell->HufCodeLen; i++)
 			HTable->table[HTree->symbol.ch].code[i] = HCell->code[i];
 		HTable->FilledCells++;
 	}
@@ -262,14 +260,14 @@ void main() {
 	unsigned short x = 1; /* 0x0001 */
 	printf("%s\n", *((unsigned char *)&x) == 0 ? "big-endian" : "little-endian");
 
-	unsigned char uniqchrs;
-	FILE *f = fopen("12345.txt", "rb");
+	unsigned short uniqchrs;
+	FILE *f = fopen("Тесты\\Win.wav", "rb");
 	FILE *fcompresed = fopen("compresed", "wb");
 	freqTable *FT = dofreqTable(f, &uniqchrs);
 	/* before do huftree save freqtable if needed*/
-	hufNode *hufTree = doHufTree(FT, uniqchrs); //seems to work
+	hufNode *hufTree = doHufTree(FT, uniqchrs); //seems to work //кривое дерево корень.частота != 1
 	hufTableCell *dummyCell = (hufTableCell *)calloc(1, sizeof(hufTableCell));
-	fillhuftable(&HTable, hufTree, dummyCell);
+	fillhuftable(&HTable, hufTree, dummyCell);//Не то количество ячеек в таблице хаффмана
 	//сжимать файл
 
 	compressHuf(f, fcompresed, &HTable);
