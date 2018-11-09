@@ -261,14 +261,14 @@ void main() {
 	printf("%s\n", *((unsigned char *)&x) == 0 ? "big-endian" : "little-endian");
 
 	unsigned short uniqchrs;
-	FILE *f = fopen("Тесты\\Win.wav", "rb");
+	FILE *f = fopen("Тесты\\example_small.bmp", "rb");
 	FILE *fcompresed = fopen("compresed", "wb");
 	freqTable *FT = dofreqTable(f, &uniqchrs);
 	/* before do huftree save freqtable if needed*/
-	hufNode *hufTree = doHufTree(FT, uniqchrs); //seems to work //кривое дерево корень.частота != 1
+	hufNode *hufTree = doHufTree(FT, uniqchrs); //seems to work 
 	hufTableCell *dummyCell = (hufTableCell *)calloc(1, sizeof(hufTableCell));
-	fillhuftable(&HTable, hufTree, dummyCell);//Не то количество ячеек в таблице хаффмана
-	//сжимать файл
+	fillhuftable(&HTable, hufTree, dummyCell);
+	//при количестве уникальных байт = 256 в таблице хаффмана в сжатом файле 1 байт = 0
 
 	compressHuf(f, fcompresed, &HTable);
 	fclose(f);
